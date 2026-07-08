@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Header, HTTPException, Request, Response
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from typing import Optional
 from collections import defaultdict, deque
@@ -17,7 +18,7 @@ WINDOW_SECONDS = 10
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -55,6 +56,9 @@ ORDERS = [
 @app.middleware("http")
 async def rate_limit(request: Request, call_next):
 
+    if request.method == "OPTIONS":
+        return await call_next(request)
+
     client_id = request.headers.get("X-Client-Id")
 
     if client_id:
@@ -66,24 +70,18 @@ async def rate_limit(request: Request, call_next):
 
         if len(bucket) >= RATE_LIMIT:
             retry_after = int(
-                max(
-                    1,
-                    WINDOW_SECONDS - (now - bucket[0])
-                )
+                max(1, WINDOW_SECONDS - (now - bucket[0]))
             )
 
             return Response(
                 content="Rate limit exceeded",
                 status_code=429,
-                headers={
-                    "Retry-After": str(retry_after)
-                }
+                headers={"Retry-After": str(retry_after)}
             )
 
         bucket.append(now)
 
     return await call_next(request)
-
 
 @app.get("/")
 def root():
@@ -94,7 +92,9 @@ def root():
 # Idempotent POST /orders
 # -------------------------
 
-@app.post("/orders", status_code=201)
+
+
+@app.post("/orders")
 def create_order(
     idempotency_key: Optional[str] = Header(
         default=None,
@@ -108,7 +108,10 @@ def create_order(
         )
 
     if idempotency_key in idempotency_store:
-        return idempotency_store[idempotency_key]
+        return JSONResponse(
+            content=idempotency_store[idempotency_key],
+            status_code=200
+        )
 
     order = {
         "id": str(uuid.uuid4())
@@ -116,8 +119,10 @@ def create_order(
 
     idempotency_store[idempotency_key] = order
 
-    return order
-
+    return JSONResponse(
+        content=order,
+        status_code=201
+    )
 
 # -------------------------
 # Cursor pagination
