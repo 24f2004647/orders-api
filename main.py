@@ -124,33 +124,30 @@ def create_order(
 # -------------------------
 
 @app.get("/orders")
-def list_orders(
-    limit: int = 10,
-    cursor: Optional[str] = None
-):
-    start_index = 0
+def list_orders(limit: int = 10, cursor: str | None = None):
+    start_id = 1
 
     if cursor:
         try:
-            start_index = int(
-                base64.b64decode(cursor.encode()).decode()
-            )
-        except Exception:
-            start_index = 0
+            start_id = int(cursor)
+        except:
+            start_id = 1
 
-    end_index = min(
-        start_index + limit,
-        TOTAL_ORDERS
-    )
+    items = []
 
-    items = ORDERS[start_index:end_index]
+    current_id = start_id
+
+    while current_id <= TOTAL_ORDERS and len(items) < limit:
+        items.append({
+            "id": current_id,
+            "item": f"order-{current_id}"
+        })
+        current_id += 1
 
     next_cursor = None
 
-    if end_index < TOTAL_ORDERS:
-        next_cursor = base64.b64encode(
-            str(end_index).encode()
-        ).decode()
+    if current_id <= TOTAL_ORDERS:
+        next_cursor = str(current_id)
 
     return {
         "items": items,
